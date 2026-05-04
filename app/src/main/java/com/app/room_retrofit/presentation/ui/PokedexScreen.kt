@@ -63,7 +63,6 @@ import com.app.room_retrofit.presentation.viewmodel.PokedexViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.URL
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -295,8 +294,7 @@ fun PokemonSprite(
                         spriteBytes.size
                     )
                 }
-                if (url == null) return@withContext null
-                URL(url).openStream().use(BitmapFactory::decodeStream)
+                null
             }.getOrNull()
         }
     }

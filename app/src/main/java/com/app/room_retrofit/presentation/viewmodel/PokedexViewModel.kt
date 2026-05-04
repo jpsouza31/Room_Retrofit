@@ -67,14 +67,14 @@ class PokedexViewModel @Inject constructor(
             val cachedPokemon = repository.getCachedPokemon()
             if (cachedPokemon.isNotEmpty() && !forceRefresh) {
                 loadedPokemonByFilter[EvStat.ALL] = cachedPokemon
-                nextOffsetByFilter[EvStat.ALL] = repository.getHighestCachedId()
+                nextOffsetByFilter[EvStat.ALL] = repository.getNextPageOffset()
                 _uiState.value = _uiState.value.copy(
                     pokemon = cachedPokemon,
                     isLoading = false,
-                    canLoadMore = canLoadMoreFrom(repository.getHighestCachedId())
+                    canLoadMore = canLoadMoreFrom(repository.getNextPageOffset())
                 ).withFilters()
             } else {
-                nextOffsetByFilter[EvStat.ALL] = if (forceRefresh) 0 else repository.getHighestCachedId()
+                nextOffsetByFilter[EvStat.ALL] = if (forceRefresh) 0 else repository.getNextPageOffset()
                 _uiState.value = _uiState.value.copy(
                     pokemon = if (forceRefresh) cachedPokemon else emptyList(),
                     filteredPokemon = if (forceRefresh) cachedPokemon else emptyList()
@@ -152,7 +152,7 @@ class PokedexViewModel @Inject constructor(
                         isLoadingNextPage = false,
                         canLoadMore = false,
                         error = null,
-                        isOffline = false
+                        isOffline = !repository.isOnline()
                     ).withFilters()
                 }
                 is Resource.Error -> {
@@ -180,7 +180,7 @@ class PokedexViewModel @Inject constructor(
 
             val cachedPokemon = repository.getCachedPokemon()
             val pokemon = cachedPokemon.forStat(stat)
-            val nextOffset = maxOf(nextOffsetByFilter[stat] ?: 0, repository.getHighestCachedId())
+            val nextOffset = maxOf(nextOffsetByFilter[stat] ?: 0, repository.getNextPageOffset())
             loadedPokemonByFilter[stat] = pokemon
             nextOffsetByFilter[stat] = nextOffset
 
@@ -252,7 +252,7 @@ class PokedexViewModel @Inject constructor(
                     val cachedPokemon = repository.getCachedPokemon()
                     val pokemon = cachedPokemon.forStat(stat)
                     loadedPokemonByFilter[stat] = pokemon
-                    nextOffsetByFilter[stat] = repository.getHighestCachedId()
+                    nextOffsetByFilter[stat] = repository.getNextPageOffset()
                     _uiState.value = _uiState.value.copy(
                         pokemon = pokemon,
                         isLoading = false,
@@ -278,15 +278,16 @@ class PokedexViewModel @Inject constructor(
     private suspend fun loadAllPokemonPage(offset: Int) {
         when (val result = repository.loadPage(pageSize, offset)) {
             is Resource.Success -> {
-                val pokemon = result.data.orEmpty().sortedBy { it.id }
+                val pokemon = repository.getCachedPokemon()
+                    .forStat(EvStat.ALL)
                 loadedPokemonByFilter[EvStat.ALL] = pokemon
-                nextOffsetByFilter[EvStat.ALL] = repository.getHighestCachedId()
+                nextOffsetByFilter[EvStat.ALL] = repository.getNextPageOffset()
                 _uiState.value = _uiState.value.copy(
                     pokemon = pokemon,
                     isLoading = false,
                     isRefreshing = false,
                     isLoadingNextPage = false,
-                    canLoadMore = canLoadMoreFrom(repository.getHighestCachedId()),
+                    canLoadMore = canLoadMoreFrom(repository.getNextPageOffset()),
                     error = null,
                     isOffline = false
                 ).withFilters()
@@ -294,7 +295,7 @@ class PokedexViewModel @Inject constructor(
             is Resource.Error -> {
                 val pokemon = result.data ?: repository.getCachedPokemon()
                 loadedPokemonByFilter[EvStat.ALL] = pokemon
-                nextOffsetByFilter[EvStat.ALL] = repository.getHighestCachedId()
+                nextOffsetByFilter[EvStat.ALL] = repository.getNextPageOffset()
                 _uiState.value = _uiState.value.copy(
                     pokemon = pokemon.sortedBy { it.id },
                     isLoading = false,
@@ -313,7 +314,7 @@ class PokedexViewModel @Inject constructor(
     private suspend fun loadEvFilteredPage(stat: EvStat, offset: Int) {
         val total = totalCount ?: return
         val cachedPokemon = repository.getCachedPokemon()
-        var scanOffset = maxOf(offset, repository.getHighestCachedId())
+        var scanOffset = maxOf(offset, repository.getNextPageOffset())
         val targetSize = loadedPokemonByFilter[stat].orEmpty().size + pageSize
         val accumulated = (loadedPokemonByFilter[stat].orEmpty() + cachedPokemon.forStat(stat))
             .distinctBy { it.id }

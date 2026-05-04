@@ -39,8 +39,8 @@ class PokedexRepository @Inject constructor(
     suspend fun getCachedPokemon(): List<Pokemon> =
         dao.getPokemon().first().map { it.toPokemon() }.sortedBy { it.id }
 
-    suspend fun getHighestCachedId(): Int =
-        dao.getHighestCachedId() ?: 0
+    suspend fun getNextPageOffset(): Int =
+        getCachedPokemon().nextPageOffsetForCache()
 
     suspend fun getTotalPokemonCount(): Resource<Int> {
         if (!context.isOnline()) {
@@ -156,4 +156,13 @@ private fun Context.isOnline(): Boolean {
     val network = connectivityManager.activeNetwork ?: return false
     val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
     return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
+
+internal fun List<Pokemon>.nextPageOffsetForCache(): Int {
+    var expectedId = 1
+    for (pokemon in sortedBy { it.id }) {
+        if (pokemon.id != expectedId) break
+        expectedId++
+    }
+    return expectedId - 1
 }

@@ -21,9 +21,6 @@ interface PokemonDao {
     @Query("SELECT MAX(cachedAt) FROM pokemon")
     suspend fun getLastCacheTime(): Long?
 
-    @Query("SELECT MAX(id) FROM pokemon")
-    suspend fun getHighestCachedId(): Int?
-
     @Query("SELECT * FROM pokemon WHERE id = :id LIMIT 1")
     suspend fun getPokemonById(id: Int): PokemonEntity?
 
