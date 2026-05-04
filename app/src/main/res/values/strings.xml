@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">EV Pokedex</string>
+    <string name="error_no_connection_count">Sem conexão para consultar a contagem da PokeAPI.</string>
+    <string name="error_offline_using_cache">Você está offline. Exibindo cache local.</string>
+    <string name="error_offline_no_cache">Sem conexão e sem Pokémon em cache.</string>
+    <string name="error_pokemon_not_found_cache">Pokémon não encontrado no cache local.</string>
+    <string name="error_pokemon_not_found">Pokémon não encontrado.</string>
 </resources>

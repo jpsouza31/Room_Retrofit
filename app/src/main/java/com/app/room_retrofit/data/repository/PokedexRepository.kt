@@ -3,6 +3,7 @@ package com.app.room_retrofit.data.repository
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.app.room_retrofit.R
 import com.app.room_retrofit.data.local.dao.PokemonDao
 import com.app.room_retrofit.data.local.entity.PokemonEntity
 import com.app.room_retrofit.data.remote.api.PokeApiService
@@ -44,7 +45,7 @@ class PokedexRepository @Inject constructor(
 
     suspend fun getTotalPokemonCount(): Resource<Int> {
         if (!context.isOnline()) {
-            return Resource.Error("Sem conexao para consultar a contagem da PokeAPI.")
+            return Resource.Error(context.getString(R.string.error_no_connection_count), isOffline = true)
         }
         return runCatching {
             Resource.Success(api.getPokemonList(limit = 1).count)
@@ -65,9 +66,9 @@ class PokedexRepository @Inject constructor(
         if (!context.isOnline()) {
             val cachedPokemon = getCachedPokemon()
             return if (cachedPokemon.isNotEmpty()) {
-                Resource.Error("Voce esta offline. Exibindo cache local.", cachedPokemon)
+                Resource.Error(context.getString(R.string.error_offline_using_cache), cachedPokemon, isOffline = true)
             } else {
-                Resource.Error("Sem conexao e sem Pokemon em cache.")
+                Resource.Error(context.getString(R.string.error_offline_no_cache), isOffline = true)
             }
         }
 
@@ -104,7 +105,7 @@ class PokedexRepository @Inject constructor(
         }
 
         if (!context.isOnline()) {
-            return Resource.Error("Pokemon nao encontrado no cache local.")
+            return Resource.Error(context.getString(R.string.error_pokemon_not_found_cache), isOffline = true)
         }
 
         return runCatching {
@@ -114,9 +115,9 @@ class PokedexRepository @Inject constructor(
             Resource.Success(listOf(entity.toPokemon()))
         }.getOrElse { error ->
             val message = if (error is HttpException && error.code() == 404) {
-                "Pokemon nao encontrado."
+                context.getString(R.string.error_pokemon_not_found)
             } else {
-                error.localizedMessage ?: "Pokemon nao encontrado."
+                error.localizedMessage ?: context.getString(R.string.error_pokemon_not_found)
             }
             Resource.Error(message)
         }
