@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -42,6 +43,22 @@ class PokedexViewModel @Inject constructor(
     val uiState: StateFlow<PokedexUiState> = _uiState.asStateFlow()
 
     init {
+        _uiState.value = _uiState.value.copy(isOffline = !repository.isOnline())
+
+        // Room é a single source of truth.
+        // Qualquer inserção via rede emite aqui automaticamente, sem re-leitura manual.
+        viewModelScope.launch {
+            repository.pokemonFlow().collect { freshList ->
+                val state = _uiState.value
+                if (state.query.isBlank() && !state.isLoading && !state.isLoadingNextPage) {
+                    val stat = state.selectedEvStat
+                    val pokemon = freshList.forStat(stat)
+                    loadedPokemonByFilter[stat] = pokemon
+                    nextOffsetByFilter[stat] = freshList.maxOfOrNull { it.id } ?: 0
+                    _uiState.value = state.copy(pokemon = pokemon).withFilters()
+                }
+            }
+        }
         loadInitialPage()
     }
 

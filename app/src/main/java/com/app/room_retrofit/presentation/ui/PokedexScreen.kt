@@ -150,7 +150,11 @@ fun PokedexScreen(
                     }
                     uiState.filteredPokemon.isEmpty() -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Nenhum Pokemon encontrado")
+                            if (uiState.isOffline && uiState.query.isBlank()) {
+                                OfflineEmptyState(onRetry = { viewModel.loadInitialPage(forceRefresh = true) })
+                            } else {
+                                Text("Nenhum Pokemon encontrado")
+                            }
                         }
                     }
                     else -> {
@@ -347,6 +351,30 @@ fun EvYieldBadge(value: Int, label: String) {
             )
         }
     )
+}
+
+@Composable
+private fun OfflineEmptyState(onRetry: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(32.dp)
+    ) {
+        Text(
+            text = "Sem conexao com a internet",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "Conecte-se para carregar os Pokemon",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onRetry) {
+            Text("Tentar novamente")
+        }
+    }
 }
 
 fun Pokemon.displayName(): String =

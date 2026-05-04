@@ -9,13 +9,15 @@ import com.app.room_retrofit.data.remote.api.PokeApiService
 import com.app.room_retrofit.data.remote.dto.PokemonDetailDto
 import com.app.room_retrofit.data.remote.dto.PokemonListItemDto
 import com.app.room_retrofit.domain.model.Pokemon
-import com.app.room_retrofit.domain.model.PokemonEvYield
-import com.app.room_retrofit.domain.model.PokemonStats
+import com.app.room_retrofit.domain.model.toEntity
+import com.app.room_retrofit.domain.model.toPokemon
 import com.app.room_retrofit.util.Resource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.coroutineScope
 import retrofit2.HttpException
 import javax.inject.Inject
@@ -28,6 +30,11 @@ class PokedexRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val cacheValidityMs = 24 * 60 * 60 * 1000L
+
+    fun isOnline(): Boolean = context.isOnline()
+
+    fun pokemonFlow(): Flow<List<Pokemon>> =
+        dao.getPokemon().map { list -> list.map { it.toPokemon() } }
 
     suspend fun getCachedPokemon(): List<Pokemon> =
         dao.getPokemon().first().map { it.toPokemon() }.sortedBy { it.id }
@@ -51,11 +58,7 @@ class PokedexRepository @Inject constructor(
     }
 
     suspend fun loadPage(limit: Int, offset: Int): Resource<List<Pokemon>> {
-        return when (val result = fetchPage(limit = limit, offset = offset)) {
-            is Resource.Success -> Resource.Success(getCachedPokemon())
-            is Resource.Error -> result
-            is Resource.Loading -> result
-        }
+        return fetchPage(limit = limit, offset = offset)
     }
 
     suspend fun fetchPage(limit: Int, offset: Int): Resource<List<Pokemon>> {
@@ -145,55 +148,6 @@ class PokedexRepository @Inject constructor(
         }.getOrNull()
     }
 
-    private fun PokemonEntity.toPokemon() = Pokemon(
-        id = id,
-        name = name,
-        spriteUrl = spriteUrl,
-        spriteBytes = spriteBytes,
-        types = types.split(",").filter { it.isNotBlank() },
-        stats = PokemonStats(
-            hp = hp,
-            attack = attack,
-            defense = defense,
-            specialAttack = specialAttack,
-            specialDefense = specialDefense,
-            speed = speed
-        ),
-        evYield = PokemonEvYield(
-            hp = hpEv,
-            attack = attackEv,
-            defense = defenseEv,
-            specialAttack = specialAttackEv,
-            specialDefense = specialDefenseEv,
-            speed = speedEv
-        )
-    )
-
-    private fun PokemonDetailDto.toEntity(spriteBytes: ByteArray?) = PokemonEntity(
-        id = id,
-        name = name,
-        spriteUrl = sprites.other?.officialArtwork?.frontDefault ?: sprites.frontDefault,
-        spriteBytes = spriteBytes,
-        types = types.sortedBy { it.slot }.joinToString(",") { it.type.name },
-        hp = baseStat("hp"),
-        attack = baseStat("attack"),
-        defense = baseStat("defense"),
-        specialAttack = baseStat("special-attack"),
-        specialDefense = baseStat("special-defense"),
-        speed = baseStat("speed"),
-        hpEv = effort("hp"),
-        attackEv = effort("attack"),
-        defenseEv = effort("defense"),
-        specialAttackEv = effort("special-attack"),
-        specialDefenseEv = effort("special-defense"),
-        speedEv = effort("speed")
-    )
-
-    private fun PokemonDetailDto.baseStat(name: String): Int =
-        stats.firstOrNull { it.stat.name == name }?.baseStat ?: 0
-
-    private fun PokemonDetailDto.effort(name: String): Int =
-        stats.firstOrNull { it.stat.name == name }?.effort ?: 0
 }
 
 private fun Context.isOnline(): Boolean {
