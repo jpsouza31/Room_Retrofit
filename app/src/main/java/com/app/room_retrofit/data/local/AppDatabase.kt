@@ -2,10 +2,10 @@ package com.app.room_retrofit.data.local
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
-import com.app.room_retrofit.data.local.dao.ArticleDao
-import com.app.room_retrofit.data.local.entity.ArticleEntity
+import com.app.room_retrofit.data.local.dao.PokemonDao
+import com.app.room_retrofit.data.local.entity.PokemonEntity
 
-@Database(entities = [ArticleEntity::class], version = 1, exportSchema = false)
+@Database(entities = [PokemonEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun articleDao(): ArticleDao
+    abstract fun pokemonDao(): PokemonDao
 }

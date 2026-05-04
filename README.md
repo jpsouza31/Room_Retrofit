@@ -1,16 +1,19 @@
-# NewsCache - Room + Retrofit + Compose
+# EV Pokedex - PokeAPI + Room + Retrofit
 
-Aplicativo Android de exemplo para consumo de noticias com cache local. O app busca manchetes na NewsAPI, salva os artigos no Room e continua exibindo dados cacheados quando o dispositivo esta offline ou quando a API falha.
+Aplicativo Android que replica os principios de uma EV Pokedex: consulta Pokemon na PokeAPI, calcula o EV yield a partir dos dados oficiais, salva tudo em cache local com Room e mantem a consulta funcionando offline.
 
 ## Funcionalidades
 
-- Lista de noticias com Jetpack Compose.
-- Pull-to-refresh para forcar nova busca na API.
-- Cache local com Room.
-- Leitura offline de dados cacheados.
-- Tela de detalhe com WebView quando ha conexao.
-- Fallback offline na tela de detalhe exibindo o resumo salvo.
-- Avisos de erro via Snackbar e banner de modo offline.
+- Lista completa de Pokemon retornada pela PokeAPI.
+- Carregamento paginado de 20 Pokemon por vez, ordenado por numero da Pokedex.
+- Busca por nome ou numero usando cache local primeiro e PokeAPI como sincronizacao.
+- Filtros por EV yield: HP, Attack, Defense, Sp. Atk, Sp. Def e Speed.
+- Ordenacao sempre por numero da Pokedex, inclusive com filtros ativos.
+- Tela de detalhe com sprite, tipos, EV yield e base stats.
+- Cache local com Room para uso offline, incluindo os bytes do sprite.
+- Pull-to-refresh para atualizar os dados da PokeAPI.
+- Botao para limpar o cache local.
+- Snackbar para erros e banner quando o cache offline esta sendo usado.
 
 ## Arquitetura
 
@@ -27,69 +30,61 @@ Repository
     |-------------------|
     v                   v
 Room DAO            Retrofit API
-cache local         NewsAPI
+cache local         PokeAPI
 ```
 
-O `NewsRepository` centraliza a regra de cache:
+O `PokedexRepository` e o ponto central da sincronizacao:
 
 1. Emite `Loading`.
-2. Carrega o cache local via Room.
-3. Se existir cache, emite os dados imediatamente.
+2. Le o cache salvo no Room.
+3. Se existir cache, entrega os dados imediatamente.
 4. Se o cache ainda estiver valido, encerra sem chamar a API.
-5. Se estiver offline, mantem os dados cacheados ou emite erro.
-6. Se estiver online, busca dados novos na API, limpa o cache antigo e salva os artigos atualizados.
+5. Se estiver offline, lista, filtros, busca e detalhe continuam usando o que ja existe no Room.
+6. Se estiver online, busca a contagem completa e carrega paginas de 20 Pokemon conforme o usuario rola a lista.
+7. Pull-to-refresh nunca apaga o cache antes da rede responder; se a sincronizacao falhar, o app mantem os dados locais.
 
-O cache e considerado valido por 5 minutos.
+O cache e considerado valido por 24 horas, ja que dados de Pokemon mudam pouco.
 
 ## Estrutura
 
 ```text
 app/src/main/java/com/app/room_retrofit/
-├── MainActivity.kt                         # Entry point Compose
-├── MyApplication.kt                        # Hilt application
+├── MainActivity.kt
+├── MyApplication.kt
 ├── data/
 │   ├── local/
-│   │   ├── AppDatabase.kt                  # Configuracao Room
-│   │   ├── dao/ArticleDao.kt               # Queries do cache
-│   │   └── entity/ArticleEntity.kt         # Entidade Room
+│   │   ├── AppDatabase.kt
+│   │   ├── dao/PokemonDao.kt
+│   │   └── entity/PokemonEntity.kt
 │   ├── remote/
-│   │   ├── api/NewsApiService.kt           # Endpoints Retrofit
-│   │   └── dto/NewsResponse.kt             # DTOs da NewsAPI
-│   └── repository/NewsRepository.kt        # Regra de cache e sincronizacao
-├── di/AppModule.kt                         # Providers Hilt
-├── domain/model/Article.kt                 # Modelo de dominio e mappers
+│   │   ├── api/PokeApiService.kt
+│   │   └── dto/PokemonDto.kt
+│   └── repository/PokedexRepository.kt
+├── di/AppModule.kt
+├── domain/model/Pokemon.kt
 ├── presentation/
-│   ├── navigation/AppNavigation.kt         # Rotas Compose
+│   ├── navigation/AppNavigation.kt
 │   ├── ui/
-│   │   ├── NewsScreen.kt                   # Lista de noticias
-│   │   └── ArticleDetailScreen.kt          # Detalhe/WebView/offline
+│   │   ├── PokedexScreen.kt
+│   │   └── PokemonDetailScreen.kt
 │   └── viewmodel/
-│       ├── NewsViewModel.kt                # Estado da lista
-│       └── ArticleDetailViewModel.kt       # Estado do detalhe
+│       ├── PokedexViewModel.kt
+│       └── PokemonDetailViewModel.kt
 └── util/
-    ├── NetworkUtil.kt                      # Verificacao de conectividade
-    └── Resource.kt                         # Loading/Success/Error
+    └── Resource.kt
 ```
 
 ## Setup
 
-### 1. Configure a API key
+Nao e necessario configurar chave de API. A PokeAPI e publica.
 
-Crie uma chave em [newsapi.org](https://newsapi.org) e adicione ao arquivo `local.properties` na raiz do projeto:
-
-```properties
-NEWS_API_KEY=sua_chave_aqui
-```
-
-O valor e lido no `app/build.gradle.kts` e exposto como `BuildConfig.NEWS_API_KEY`.
-
-### 2. Compile o projeto
+Compile o projeto:
 
 ```bash
 ./gradlew :app:compileDebugKotlin
 ```
 
-Para gerar o APK de debug:
+Gere o APK de debug:
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -109,6 +104,15 @@ Para gerar o APK de debug:
 - Hilt
 - KSP
 
+## Endpoints usados
+
+- `GET https://pokeapi.co/api/v2/pokemon?limit=20&offset={offset}`
+- `GET https://pokeapi.co/api/v2/pokemon/{nameOrId}`
+- URLs de sprites retornadas em `sprites.front_default`
+
+Os valores de EV yield vem do campo `stats[].effort` retornado pelo endpoint de detalhe de cada Pokemon.
+O banco local se chama `pokedex_cache.db` e o schema atual do Room esta na versao 2.
+
 ## Permissoes
 
 Declaradas em `app/src/main/AndroidManifest.xml`:
@@ -121,16 +125,11 @@ Declaradas em `app/src/main/AndroidManifest.xml`:
 | Condicao | Resultado |
 |---|---|
 | Online com cache valido | Exibe cache e nao chama a API |
-| Online com cache vencido | Busca API, atualiza Room e exibe dados novos |
+| Online com cache vencido | Busca PokeAPI, atualiza Room e exibe dados novos |
 | Offline com cache | Exibe cache e mostra aviso offline |
 | Offline sem cache | Exibe erro de conexao |
 | Falha na API com cache | Mantem cache e mostra erro |
-| Pull-to-refresh | Forca tentativa de atualizacao pela API |
-
-## Observacoes
-
-- A API usada e `https://newsapi.org/v2/top-headlines`.
-- A consulta atual usa `country = "us"` e `pageSize = 20`.
-- O banco local chama `news_cache.db`.
-- O schema do Room esta com `exportSchema = false`.
-- `local.properties` nao deve ser versionado porque contem configuracoes locais e a chave da API.
+| Pull-to-refresh | Tenta sincronizar com a API sem descartar o cache existente |
+| Busca offline | Procura por nome ou numero no Room |
+| Filtro offline | Filtra os Pokemon salvos no Room |
+| Limpar cache | Remove os Pokemon salvos no Room e zera o estado da tela |
