@@ -1,0 +1,288 @@
+package com.app.room_retrofit.presentation.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.app.room_retrofit.data.repository.PokedexRepository
+import com.app.room_retrofit.domain.model.EvStat
+import com.app.room_retrofit.domain.model.Pokemon
+import com.app.room_retrofit.util.Resource
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class PokedexUiState(
+    val pokemon: List<Pokemon> = emptyList(),
+    val filteredPokemon: List<Pokemon> = emptyList(),
+    val query: String = "",
+    val selectedEvStat: EvStat = EvStat.ALL,
+    val isLoading: Boolean = false,
+    val isLoadingNextPage: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val canLoadMore: Boolean = true,
+    val error: String? = null,
+    val isOffline: Boolean = false
+)
+
+@HiltViewModel
+class PokedexViewModel @Inject constructor(
+    private val repository: PokedexRepository
+) : ViewModel() {
+
+    private val paginator = PokedexPaginator(repository)
+    private var searchJob: Job? = null
+
+    private val _uiState = MutableStateFlow(PokedexUiState())
+    val uiState: StateFlow<PokedexUiState> = _uiState.asStateFlow()
+
+    init {
+        _uiState.value = _uiState.value.copy(isOffline = !repository.isOnline())
+
+        // Room é a single source of truth.
+        // Qualquer inserção via rede emite aqui automaticamente, sem re-leitura manual.
+        viewModelScope.launch {
+            repository.pokemonFlow().collect { freshList ->
+                val state = _uiState.value
+                if (state.query.isBlank() && !state.isLoading && !state.isLoadingNextPage) {
+                    val stat = state.selectedEvStat
+                    val pokemon = freshList.forStat(stat)
+                    paginator.setLoaded(stat, pokemon)
+                    paginator.setOffset(stat, freshList.maxOfOrNull { it.id } ?: 0)
+                    _uiState.value = state.copy(pokemon = pokemon).withFilters()
+                }
+            }
+        }
+        loadInitialPage()
+    }
+
+    fun loadInitialPage(forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            val cachedPokemon = repository.getCachedPokemon()
+            if (cachedPokemon.isNotEmpty() && !forceRefresh) {
+                paginator.setLoaded(EvStat.ALL, cachedPokemon)
+                paginator.setOffset(EvStat.ALL, repository.getNextPageOffset())
+                _uiState.value = _uiState.value.copy(
+                    pokemon = cachedPokemon,
+                    isLoading = false,
+                    canLoadMore = paginator.canLoadMore(repository.getNextPageOffset())
+                ).withFilters()
+            } else {
+                paginator.setOffset(EvStat.ALL, if (forceRefresh) 0 else repository.getNextPageOffset())
+                _uiState.value = _uiState.value.copy(
+                    pokemon = if (forceRefresh) cachedPokemon else emptyList(),
+                    filteredPokemon = if (forceRefresh) cachedPokemon else emptyList()
+                )
+            }
+
+            val shouldRefresh = forceRefresh || repository.shouldRefreshCache()
+            if (!shouldRefresh && cachedPokemon.isNotEmpty()) return@launch
+
+            loadPageForFilter(stat = EvStat.ALL, refreshing = forceRefresh)
+        }
+    }
+
+    fun loadNextPage() {
+        val state = _uiState.value
+        if (state.isLoading || state.isLoadingNextPage || !state.canLoadMore) return
+        if (state.query.isNotBlank()) return
+        viewModelScope.launch {
+            loadPageForFilter(stat = state.selectedEvStat, refreshing = false)
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            val selectedStat = _uiState.value.selectedEvStat
+            paginator.reset()
+            val cachedPokemon = repository.getCachedPokemon()
+            paginator.setLoaded(selectedStat, cachedPokemon.forStat(selectedStat))
+            paginator.setOffset(selectedStat, 0)
+            _uiState.value = _uiState.value.copy(
+                pokemon = cachedPokemon.forStat(selectedStat),
+                canLoadMore = true
+            ).withFilters()
+            loadPageForFilter(stat = selectedStat, refreshing = true)
+        }
+    }
+
+    fun updateQuery(query: String) {
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(query = query)
+
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isBlank()) {
+            val stat = _uiState.value.selectedEvStat
+            val pokemon = paginator.loaded(stat)
+            _uiState.value = _uiState.value.copy(
+                pokemon = pokemon,
+                isLoading = false,
+                canLoadMore = paginator.canLoadMore(paginator.offsetOrNull(stat) ?: pokemon.size),
+                error = null
+            ).withFilters()
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            pokemon = emptyList(),
+            filteredPokemon = emptyList(),
+            isLoading = true,
+            isLoadingNextPage = false,
+            canLoadMore = false
+        )
+
+        searchJob = viewModelScope.launch {
+            delay(300)
+            when (val result = repository.searchPokemon(normalizedQuery)) {
+                is Resource.Success -> {
+                    val pokemon = result.data.orEmpty().forStat(_uiState.value.selectedEvStat)
+                    _uiState.value = _uiState.value.copy(
+                        pokemon = pokemon,
+                        isLoading = false,
+                        isLoadingNextPage = false,
+                        canLoadMore = false,
+                        error = null,
+                        isOffline = !repository.isOnline()
+                    ).withFilters()
+                }
+                is Resource.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        pokemon = emptyList(),
+                        filteredPokemon = emptyList(),
+                        isLoading = false,
+                        isLoadingNextPage = false,
+                        canLoadMore = false,
+                        error = result.message
+                    )
+                }
+                is Resource.Loading -> Unit
+            }
+        }
+    }
+
+    fun selectEvStat(stat: EvStat) {
+        viewModelScope.launch {
+            if (_uiState.value.query.isNotBlank()) {
+                _uiState.value = _uiState.value.copy(selectedEvStat = stat)
+                updateQuery(_uiState.value.query)
+                return@launch
+            }
+
+            val cachedPokemon = repository.getCachedPokemon()
+            val pokemon = cachedPokemon.forStat(stat)
+            val nextOffset = maxOf(paginator.offset(stat), repository.getNextPageOffset())
+            paginator.setLoaded(stat, pokemon)
+            paginator.setOffset(stat, nextOffset)
+
+            _uiState.value = _uiState.value.copy(
+                pokemon = pokemon,
+                selectedEvStat = stat,
+                isLoadingNextPage = false,
+                canLoadMore = paginator.canLoadMore(nextOffset)
+            ).withFilters()
+
+            if (pokemon.size < paginator.pageSize && paginator.canLoadMore(nextOffset)) {
+                loadPageForFilter(stat = stat, refreshing = false)
+            }
+        }
+    }
+
+    fun clearError() {
+        _uiState.value = _uiState.value.copy(error = null)
+    }
+
+    fun clearLocalCache() {
+        searchJob?.cancel()
+        viewModelScope.launch {
+            repository.clearCache()
+            paginator.reset()
+            _uiState.value = PokedexUiState(error = "Cache local limpo.")
+        }
+    }
+
+    private fun PokedexUiState.withFilters(): PokedexUiState {
+        val normalizedQuery = query.trim()
+        val filtered = pokemon.asSequence()
+            .filter { item ->
+                normalizedQuery.isBlank() ||
+                    item.name.contains(normalizedQuery, ignoreCase = true) ||
+                    item.id.toString() == normalizedQuery
+            }
+            .filter { item -> selectedEvStat == EvStat.ALL || item.evFor(selectedEvStat) > 0 }
+            .sortedBy { it.id }
+            .toList()
+        return copy(filteredPokemon = filtered)
+    }
+
+    private fun List<Pokemon>.forStat(stat: EvStat): List<Pokemon> =
+        asSequence()
+            .filter { stat == EvStat.ALL || it.evFor(stat) > 0 }
+            .sortedBy { it.id }
+            .toList()
+
+    private suspend fun loadPageForFilter(stat: EvStat, refreshing: Boolean) {
+        val offset = paginator.offset(stat)
+        _uiState.value = _uiState.value.copy(
+            isLoading = offset == 0 && _uiState.value.pokemon.isEmpty(),
+            isRefreshing = refreshing,
+            isLoadingNextPage = offset > 0
+        )
+
+        if (paginator.totalCount == null) {
+            when (val countResult = repository.getTotalPokemonCount()) {
+                is Resource.Success -> paginator.totalCount = countResult.data
+                is Resource.Error -> {
+                    val cachedPokemon = repository.getCachedPokemon()
+                    val pokemon = cachedPokemon.forStat(stat)
+                    paginator.setLoaded(stat, pokemon)
+                    paginator.setOffset(stat, repository.getNextPageOffset())
+                    _uiState.value = _uiState.value.copy(
+                        pokemon = pokemon,
+                        isLoading = false,
+                        isRefreshing = false,
+                        isLoadingNextPage = false,
+                        canLoadMore = false,
+                        error = countResult.message,
+                        isOffline = countResult.isOffline
+                    ).withFilters()
+                    return
+                }
+                is Resource.Loading -> Unit
+            }
+        }
+
+        val result = if (stat == EvStat.ALL) {
+            paginator.loadAllPage(offset)
+        } else {
+            paginator.loadEvFilteredPage(stat)
+        }
+
+        applyPageResult(result)
+    }
+
+    private fun applyPageResult(result: PageLoadResult) {
+        _uiState.value = when (result) {
+            is PageLoadResult.Success -> _uiState.value.copy(
+                pokemon = result.pokemon,
+                isLoading = false,
+                isRefreshing = false,
+                isLoadingNextPage = false,
+                canLoadMore = result.canLoadMore,
+                error = null,
+                isOffline = false
+            ).withFilters()
+            is PageLoadResult.Failure -> _uiState.value.copy(
+                pokemon = result.pokemon.sortedBy { it.id },
+                isLoading = false,
+                isRefreshing = false,
+                isLoadingNextPage = false,
+                canLoadMore = false,
+                error = result.message,
+                isOffline = result.isOffline
+            ).withFilters()
+        }
+    }
+}
