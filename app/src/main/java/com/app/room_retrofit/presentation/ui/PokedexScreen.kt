@@ -254,7 +254,6 @@ private fun PokemonListItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             PokemonSprite(
-                url = pokemon.spriteUrl,
                 spriteBytes = pokemon.spriteBytes,
                 contentDescription = pokemon.displayName(),
                 modifier = Modifier.size(72.dp)
@@ -296,20 +295,14 @@ private fun PokemonListItem(
 
 @Composable
 fun PokemonSprite(
-    url: String?,
     spriteBytes: ByteArray? = null,
     contentDescription: String?,
     modifier: Modifier = Modifier
 ) {
-    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = url, key2 = spriteBytes) {
+    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = spriteBytes) {
         value = withContext(Dispatchers.IO) {
             runCatching {
-                if (spriteBytes != null) {
-                    return@withContext BitmapFactory.decodeByteArray(spriteBytes, 0, spriteBytes.size)
-                }
-                url?.let { spriteUrl ->
-                    java.net.URL(spriteUrl).openStream().use { BitmapFactory.decodeStream(it) }
-                }
+                spriteBytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
             }.getOrNull()
         }
     }

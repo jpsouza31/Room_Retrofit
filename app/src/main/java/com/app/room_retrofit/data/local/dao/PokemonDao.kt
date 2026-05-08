@@ -21,8 +21,14 @@ interface PokemonDao {
     @Query("SELECT MAX(cachedAt) FROM pokemon")
     suspend fun getLastCacheTime(): Long?
 
+    @Query("SELECT COUNT(*) FROM pokemon")
+    suspend fun getCachedPokemonCount(): Int
+
     @Query("SELECT * FROM pokemon WHERE id = :id LIMIT 1")
     suspend fun getPokemonById(id: Int): PokemonEntity?
+
+    @Query("SELECT * FROM pokemon WHERE id IN (:ids) ORDER BY id ASC")
+    suspend fun getPokemonByIds(ids: List<Int>): List<PokemonEntity>
 
     @Query("SELECT * FROM pokemon WHERE name LIKE '%' || :name || '%' ORDER BY id ASC")
     suspend fun searchPokemonByName(name: String): List<PokemonEntity>

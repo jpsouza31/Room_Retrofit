@@ -106,7 +106,6 @@ private fun PokemonDetailContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 PokemonSprite(
-                    url = pokemon.spriteUrl,
                     spriteBytes = pokemon.spriteBytes,
                     contentDescription = pokemon.displayName(),
                     modifier = Modifier.size(180.dp)

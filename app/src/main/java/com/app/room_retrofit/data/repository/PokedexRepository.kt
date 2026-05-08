@@ -14,7 +14,6 @@ import com.app.room_retrofit.data.local.entity.PokemonEntity
 import com.app.room_retrofit.data.remote.api.PokeApiService
 import com.app.room_retrofit.data.remote.dto.PokemonDetailDto
 import com.app.room_retrofit.data.remote.dto.PokemonListItemDto
-import com.app.room_retrofit.domain.model.DataSource
 import com.app.room_retrofit.domain.model.Pokemon
 import com.app.room_retrofit.domain.model.toEntity
 import com.app.room_retrofit.domain.model.toPokemon
@@ -37,7 +36,6 @@ class PokedexRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val cacheValidityMs = 24 * 60 * 60 * 1000L
-    private val freshIds = mutableSetOf<Int>()
 
     fun isOnline(): Boolean = context.isOnline()
 
@@ -58,21 +56,23 @@ class PokedexRepository @Inject constructor(
         awaitClose { manager.unregisterNetworkCallback(callback) }
     }.distinctUntilChanged()
 
-    private fun Int.source() =
-        if (context.isOnline() && this in freshIds) DataSource.NETWORK else DataSource.CACHE
-
     fun pokemonFlow(): Flow<List<Pokemon>> =
-        dao.getPokemon().map { list -> list.map { it.toPokemon(it.id.source()) } }
+        dao.getPokemon().map { list -> list.map { it.toPokemon() } }
 
     suspend fun getCachedPokemon(): List<Pokemon> =
-        dao.getPokemon().first().map { it.toPokemon(it.id.source()) }.sortedBy { it.id }
+        dao.getPokemon().first().map { it.toPokemon() }.sortedBy { it.id }
 
     suspend fun getNextPageOffset(): Int =
         getCachedPokemon().nextPageOffsetForCache()
 
     suspend fun getTotalPokemonCount(): Resource<Int> {
         if (!context.isOnline()) {
-            return Resource.Error(context.getString(R.string.error_no_connection_count), isOffline = true)
+            val cachedCount = dao.getCachedPokemonCount()
+            return if (cachedCount > 0) {
+                Resource.Success(cachedCount)
+            } else {
+                Resource.Error(context.getString(R.string.error_no_connection_count), isOffline = true)
+            }
         }
         return runCatching {
             Resource.Success(api.getPokemonList(limit = 1).count)
@@ -82,7 +82,6 @@ class PokedexRepository @Inject constructor(
     }
 
     suspend fun clearCache() {
-        freshIds.clear()
         dao.clearPokemon()
     }
 
@@ -102,9 +101,9 @@ class PokedexRepository @Inject constructor(
                 .mapPageToEntities()
                 .sortedBy { it.id }
 
-            freshIds.addAll(entities.map { it.id })
             dao.insertPokemon(entities)
-            Resource.Success(entities.map { it.toPokemon(DataSource.NETWORK) })
+            val cachedEntities = dao.getPokemonByIds(entities.map { it.id })
+            Resource.Success(cachedEntities.map { it.toPokemon() })
         }.getOrElse { error ->
             val cachedPokemon = getCachedPokemon()
             val message = error.localizedMessage ?: "Erro desconhecido"
@@ -136,9 +135,9 @@ class PokedexRepository @Inject constructor(
         return runCatching {
             val detail = api.getPokemonDetail(normalizedQuery)
             val entity = detail.toEntity(spriteBytes = fetchSpriteBytes(detail))
-            freshIds.add(entity.id)
             dao.insertPokemon(listOf(entity))
-            Resource.Success(listOf(entity.toPokemon(DataSource.NETWORK)))
+            val cachedEntity = dao.getPokemonById(entity.id)
+            Resource.Success(listOfNotNull(cachedEntity?.toPokemon()))
         }.getOrElse { error ->
             val message = if (error is HttpException && error.code() == 404) {
                 context.getString(R.string.error_pokemon_not_found)

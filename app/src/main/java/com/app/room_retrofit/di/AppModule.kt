@@ -51,6 +51,7 @@ object AppModule {
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "pokedex_cache.db")
             .addMigrations(AppDatabase.MIGRATION_1_2)
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
     @Provides
