@@ -40,10 +40,11 @@ class PokedexViewModel @Inject constructor(
     val uiState: StateFlow<PokedexUiState> = _uiState.asStateFlow()
 
     init {
-        _uiState.value = _uiState.value.copy(isOffline = !repository.isOnline())
-
-        // Room é a single source of truth.
-        // Qualquer inserção via rede emite aqui automaticamente, sem re-leitura manual.
+        viewModelScope.launch {
+            repository.connectivityFlow().collect { isOnline ->
+                _uiState.value = _uiState.value.copy(isOffline = !isOnline)
+            }
+        }
         viewModelScope.launch {
             repository.pokemonFlow().collect { freshList ->
                 val state = _uiState.value
@@ -158,7 +159,6 @@ class PokedexViewModel @Inject constructor(
                         error = result.message
                     )
                 }
-                is Resource.Loading -> Unit
             }
         }
     }
@@ -250,7 +250,6 @@ class PokedexViewModel @Inject constructor(
                     ).withFilters()
                     return
                 }
-                is Resource.Loading -> Unit
             }
         }
 

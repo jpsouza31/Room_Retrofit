@@ -98,7 +98,7 @@ class PokedexPaginatorTest {
     fun loadAllPage_onSuccess_returnsSortedCacheAndUpdatesState() = runBlocking {
         val page = listOf(pokemon(2), pokemon(1))
         val cache = listOf(pokemon(1), pokemon(2))
-        whenever(repository.loadPage(20, 0)).thenReturn(Resource.Success(page))
+        whenever(repository.fetchPage(20, 0)).thenReturn(Resource.Success(page))
         whenever(repository.getCachedPokemon()).thenReturn(cache)
         whenever(repository.getNextPageOffset()).thenReturn(2)
         paginator.totalCount = 100
@@ -114,7 +114,7 @@ class PokedexPaginatorTest {
     @Test
     fun loadAllPage_onError_withOfflineFlag_setsOfflineTrue() = runBlocking {
         val cached = listOf(pokemon(1))
-        whenever(repository.loadPage(20, 0)).thenReturn(
+        whenever(repository.fetchPage(20, 0)).thenReturn(
             Resource.Error("error", isOffline = true)
         )
         whenever(repository.getCachedPokemon()).thenReturn(cached)
@@ -128,7 +128,7 @@ class PokedexPaginatorTest {
 
     @Test
     fun loadAllPage_onError_withoutOfflineFlag_setsOfflineFalse() = runBlocking {
-        whenever(repository.loadPage(20, 0)).thenReturn(Resource.Error("network error"))
+        whenever(repository.fetchPage(20, 0)).thenReturn(Resource.Error("network error"))
         whenever(repository.getCachedPokemon()).thenReturn(emptyList())
         whenever(repository.getNextPageOffset()).thenReturn(0)
 

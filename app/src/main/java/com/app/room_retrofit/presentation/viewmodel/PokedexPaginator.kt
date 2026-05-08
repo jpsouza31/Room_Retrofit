@@ -24,6 +24,10 @@ class PokedexPaginator(private val repository: PokedexRepository) {
     val pageSize = 20
     var totalCount: Int? = null
 
+    companion object {
+        private const val MAX_SCAN_PAGES = 50
+    }
+
     private val nextOffsetByFilter = mutableMapOf<EvStat, Int>()
     private val loadedByFilter = mutableMapOf<EvStat, List<Pokemon>>()
 
@@ -41,7 +45,7 @@ class PokedexPaginator(private val repository: PokedexRepository) {
     }
 
     suspend fun loadAllPage(offset: Int): PageLoadResult {
-        return when (val result = repository.loadPage(pageSize, offset)) {
+        return when (val result = repository.fetchPage(pageSize, offset)) {
             is Resource.Success -> {
                 val pokemon = repository.getCachedPokemon().sortedBy { it.id }
                 val nextOffset = repository.getNextPageOffset()
@@ -56,7 +60,6 @@ class PokedexPaginator(private val repository: PokedexRepository) {
                 setOffset(EvStat.ALL, nextOffset)
                 PageLoadResult.Failure(pokemon, result.message, result.isOffline)
             }
-            is Resource.Loading -> PageLoadResult.Success(loaded(EvStat.ALL), offset(EvStat.ALL), canLoadMore(offset(EvStat.ALL)))
         }
     }
 
@@ -65,13 +68,14 @@ class PokedexPaginator(private val repository: PokedexRepository) {
         val cachedPokemon = repository.getCachedPokemon()
         var scanOffset = maxOf(offset(stat), repository.getNextPageOffset())
         val targetSize = loaded(stat).size + pageSize
+        val scanLimit = scanOffset + pageSize * MAX_SCAN_PAGES
         val accumulated = (loaded(stat) + cachedPokemon.forStat(stat))
             .distinctBy { it.id }
             .sortedBy { it.id }
             .toMutableList()
         val seen = accumulated.map { it.id }.toMutableSet()
 
-        while (accumulated.size < targetSize && scanOffset < total) {
+        while (accumulated.size < targetSize && scanOffset < total && scanOffset < scanLimit) {
             when (val result = repository.fetchPage(pageSize, scanOffset)) {
                 is Resource.Success -> {
                     result.data.orEmpty()
@@ -87,7 +91,6 @@ class PokedexPaginator(private val repository: PokedexRepository) {
                     setOffset(stat, scanOffset)
                     return PageLoadResult.Failure(pokemon, result.message, result.isOffline)
                 }
-                is Resource.Loading -> Unit
             }
         }
 

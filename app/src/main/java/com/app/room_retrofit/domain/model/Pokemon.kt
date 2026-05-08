@@ -3,6 +3,8 @@ package com.app.room_retrofit.domain.model
 import com.app.room_retrofit.data.local.entity.PokemonEntity
 import com.app.room_retrofit.data.remote.dto.PokemonDetailDto
 
+enum class DataSource { NETWORK, CACHE }
+
 data class Pokemon(
     val id: Int,
     val name: String,
@@ -10,7 +12,8 @@ data class Pokemon(
     val spriteBytes: ByteArray?,
     val types: List<String>,
     val stats: PokemonStats,
-    val evYield: PokemonEvYield
+    val evYield: PokemonEvYield,
+    val source: DataSource = DataSource.CACHE
 ) {
     val totalEvYield: Int
         get() = evYield.hp +
@@ -83,7 +86,7 @@ enum class EvStat(val label: String) {
     SPEED("Speed")
 }
 
-fun PokemonEntity.toPokemon() = Pokemon(
+fun PokemonEntity.toPokemon(source: DataSource = DataSource.CACHE) = Pokemon(
     id = id,
     name = name,
     spriteUrl = spriteUrl,
@@ -104,7 +107,8 @@ fun PokemonEntity.toPokemon() = Pokemon(
         specialAttack = specialAttackEv,
         specialDefense = specialDefenseEv,
         speed = speedEv
-    )
+    ),
+    source = source
 )
 
 fun PokemonDetailDto.toEntity(spriteBytes: ByteArray? = null) = PokemonEntity(

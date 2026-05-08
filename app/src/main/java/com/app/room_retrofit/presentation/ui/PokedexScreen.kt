@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.app.room_retrofit.domain.model.DataSource
 import com.app.room_retrofit.domain.model.EvStat
 import com.app.room_retrofit.domain.model.Pokemon
 import com.app.room_retrofit.presentation.viewmodel.PokedexViewModel
@@ -140,6 +141,9 @@ fun PokedexScreen(
                     onEvStatSelected = viewModel::selectEvStat,
                     modifier = Modifier.padding(16.dp)
                 )
+                if (uiState.isRefreshing || (uiState.isLoading && uiState.pokemon.isNotEmpty())) {
+                    ApiSyncBanner()
+                }
 
                 when {
                     uiState.isLoading && uiState.pokemon.isEmpty() -> {
@@ -171,13 +175,20 @@ fun PokedexScreen(
                             }
                             if (uiState.isLoadingNextPage) {
                                 item {
-                                    Box(
+                                    Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(24.dp),
-                                        contentAlignment = Alignment.Center
+                                            .padding(horizontal = 16.dp, vertical = 20.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        CircularProgressIndicator()
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(
+                                            text = "Buscando da API...",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
                             }
@@ -269,10 +280,16 @@ private fun PokemonListItem(
                     }
                 }
             }
-            EvYieldBadge(
-                value = pokemon.evFor(selectedEvStat),
-                label = if (selectedEvStat == EvStat.ALL) "EVs" else selectedEvStat.label
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                DataSourceBadge(source = pokemon.source)
+                EvYieldBadge(
+                    value = pokemon.evFor(selectedEvStat),
+                    label = if (selectedEvStat == EvStat.ALL) "EVs" else selectedEvStat.label
+                )
+            }
         }
     }
 }
@@ -288,13 +305,11 @@ fun PokemonSprite(
         value = withContext(Dispatchers.IO) {
             runCatching {
                 if (spriteBytes != null) {
-                    return@withContext BitmapFactory.decodeByteArray(
-                        spriteBytes,
-                        0,
-                        spriteBytes.size
-                    )
+                    return@withContext BitmapFactory.decodeByteArray(spriteBytes, 0, spriteBytes.size)
                 }
-                null
+                url?.let { spriteUrl ->
+                    java.net.URL(spriteUrl).openStream().use { BitmapFactory.decodeStream(it) }
+                }
             }.getOrNull()
         }
     }
@@ -339,6 +354,24 @@ fun TypePill(type: String) {
 }
 
 @Composable
+fun DataSourceBadge(source: DataSource) {
+    val label = if (source == DataSource.NETWORK) "API" else "Cache"
+    val tint = if (source == DataSource.NETWORK) Color(0xFF15803D) else Color(0xFF64748B)
+    Surface(
+        color = tint.copy(alpha = 0.12f),
+        contentColor = tint,
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 fun EvYieldBadge(value: Int, label: String) {
     AssistChip(
         onClick = {},
@@ -349,6 +382,30 @@ fun EvYieldBadge(value: Int, label: String) {
             )
         }
     )
+}
+
+@Composable
+private fun ApiSyncBanner() {
+    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = "Atualizando dados da API...",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
 }
 
 @Composable
