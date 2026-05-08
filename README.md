@@ -59,7 +59,9 @@ app/src/main/java/com/app/room_retrofit/
 │   ├── remote/
 │   │   ├── api/PokeApiService.kt
 │   │   └── dto/PokemonDto.kt
-│   └── repository/PokedexRepository.kt
+│   ├── repository/PokedexRepository.kt
+│   └── sync/
+│       └── PokedexSyncWorker.kt
 ├── di/AppModule.kt
 ├── domain/model/Pokemon.kt
 ├── presentation/
@@ -102,6 +104,7 @@ Gere o APK de debug:
 - Retrofit
 - OkHttp
 - Hilt
+- WorkManager
 - KSP
 
 ## Endpoints usados
@@ -133,3 +136,4 @@ Declaradas em `app/src/main/AndroidManifest.xml`:
 | Busca offline | Procura por nome ou numero no Room |
 | Filtro offline | Filtra os Pokemon salvos no Room |
 | Limpar cache | Remove os Pokemon salvos no Room e zera o estado da tela |
+| Sync em background (6h) | Atualiza todas as paginas cacheadas com rede disponivel |
