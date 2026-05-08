@@ -64,6 +64,10 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.navigation.compose)
+    // WorkManager + Hilt-Work
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
     // Coroutines
     implementation(libs.coroutines.android)
     // Tests
