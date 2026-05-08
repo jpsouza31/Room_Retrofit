@@ -5,10 +5,12 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import androidx.room.withTransaction
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.app.room_retrofit.R
+import com.app.room_retrofit.data.local.AppDatabase
 import com.app.room_retrofit.data.local.dao.PokemonDao
 import com.app.room_retrofit.data.local.entity.PokemonEntity
 import com.app.room_retrofit.data.remote.api.PokeApiService
@@ -31,6 +33,7 @@ import javax.inject.Singleton
 
 @Singleton
 class PokedexRepository @Inject constructor(
+    private val db: AppDatabase,
     private val dao: PokemonDao,
     private val api: PokeApiService,
     @ApplicationContext private val context: Context
@@ -59,6 +62,22 @@ class PokedexRepository @Inject constructor(
     fun pokemonFlow(): Flow<List<Pokemon>> =
         dao.getPokemon().map { list -> list.map { it.toPokemon() } }
 
+    fun pokemonByIdFlow(id: Int): Flow<Pokemon?> =
+        dao.observePokemonById(id).map { it?.toPokemon() }
+
+    fun searchPokemonFlow(query: String): Flow<List<Pokemon>> {
+        val normalizedQuery = query.trim().lowercase()
+        return normalizedQuery.toIntOrNull()
+            ?.let { id ->
+                dao.observePokemonById(id).map { entity ->
+                    entity?.let { listOf(it.toPokemon()) }.orEmpty()
+                }
+            }
+            ?: dao.observePokemonByName(normalizedQuery).map { list ->
+                list.map { it.toPokemon() }
+            }
+    }
+
     suspend fun getCachedPokemon(): List<Pokemon> =
         dao.getPokemon().first().map { it.toPokemon() }.sortedBy { it.id }
 
@@ -74,9 +93,9 @@ class PokedexRepository @Inject constructor(
                 Resource.Error(context.getString(R.string.error_no_connection_count), isOffline = true)
             }
         }
-        return runCatching {
+        return try {
             Resource.Success(api.getPokemonList(limit = 1).count)
-        }.getOrElse { error ->
+        } catch (error: Exception) {
             Resource.Error(error.localizedMessage ?: "Erro desconhecido")
         }
     }
@@ -95,16 +114,18 @@ class PokedexRepository @Inject constructor(
             }
         }
 
-        return runCatching {
+        return try {
             val entities = api.getPokemonList(limit = limit, offset = offset)
                 .results
                 .mapPageToEntities()
                 .sortedBy { it.id }
 
-            dao.insertPokemon(entities)
-            val cachedEntities = dao.getPokemonByIds(entities.map { it.id })
+            val cachedEntities: List<PokemonEntity> = db.withTransaction {
+                dao.insertPokemon(entities)
+                dao.getPokemonByIds(entities.map { it.id })
+            }
             Resource.Success(cachedEntities.map { it.toPokemon() })
-        }.getOrElse { error ->
+        } catch (error: Exception) {
             val cachedPokemon = getCachedPokemon()
             val message = error.localizedMessage ?: "Erro desconhecido"
             if (cachedPokemon.isNotEmpty()) Resource.Error(message, cachedPokemon) else Resource.Error(message)
@@ -132,13 +153,15 @@ class PokedexRepository @Inject constructor(
             return Resource.Error(context.getString(R.string.error_pokemon_not_found_cache), isOffline = true)
         }
 
-        return runCatching {
+        return try {
             val detail = api.getPokemonDetail(normalizedQuery)
             val entity = detail.toEntity(spriteBytes = fetchSpriteBytes(detail))
-            dao.insertPokemon(listOf(entity))
-            val cachedEntity = dao.getPokemonById(entity.id)
+            val cachedEntity: PokemonEntity? = db.withTransaction {
+                dao.insertPokemon(listOf(entity))
+                dao.getPokemonById(entity.id)
+            }
             Resource.Success(listOfNotNull(cachedEntity?.toPokemon()))
-        }.getOrElse { error ->
+        } catch (error: Exception) {
             val message = if (error is HttpException && error.code() == 404) {
                 context.getString(R.string.error_pokemon_not_found)
             } else {
@@ -169,9 +192,11 @@ class PokedexRepository @Inject constructor(
     private suspend fun fetchSpriteBytes(detail: PokemonDetailDto): ByteArray? {
         val spriteUrl = detail.sprites.frontDefault
             ?: detail.sprites.other?.officialArtwork?.frontDefault
-        return runCatching {
+        return try {
             spriteUrl?.let { api.getSprite(it).bytes() }
-        }.getOrNull()
+        } catch (e: Exception) {
+            null
+        }
     }
 
 }

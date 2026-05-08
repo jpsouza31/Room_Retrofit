@@ -63,28 +63,14 @@ class PokedexPaginatorTest {
     }
 
     @Test
-    fun loaded_defaultsToEmptyList() {
-        assertEquals(emptyList<Pokemon>(), paginator.loaded(EvStat.ALL))
-    }
-
-    @Test
-    fun setLoaded_andLoaded_returnStoredList() {
-        val list = listOf(pokemon(1), pokemon(2))
-        paginator.setLoaded(EvStat.ALL, list)
-        assertEquals(list, paginator.loaded(EvStat.ALL))
-    }
-
-    @Test
     fun reset_clearsAllStateAndTotalCount() {
         paginator.totalCount = 151
         paginator.setOffset(EvStat.ALL, 20)
-        paginator.setLoaded(EvStat.ALL, listOf(pokemon(1)))
 
         paginator.reset()
 
         assertNull(paginator.totalCount)
         assertEquals(0, paginator.offset(EvStat.ALL))
-        assertEquals(emptyList<Pokemon>(), paginator.loaded(EvStat.ALL))
     }
 
     @Test
@@ -95,41 +81,33 @@ class PokedexPaginatorTest {
     // --- loadAllPage ---
 
     @Test
-    fun loadAllPage_onSuccess_returnsSortedCacheAndUpdatesState() = runBlocking {
+    fun loadAllPage_onSuccess_updatesOffsetAndReturnsCanLoadMore() = runBlocking {
         val page = listOf(pokemon(2), pokemon(1))
-        val cache = listOf(pokemon(1), pokemon(2))
         whenever(repository.fetchPage(20, 0)).thenReturn(Resource.Success(page))
-        whenever(repository.getCachedPokemon()).thenReturn(cache)
         whenever(repository.getNextPageOffset()).thenReturn(2)
         paginator.totalCount = 100
 
         val result = paginator.loadAllPage(0) as PageLoadResult.Success
 
-        assertEquals(listOf(pokemon(1), pokemon(2)), result.pokemon)
-        assertEquals(2, result.nextOffset)
         assertTrue(result.canLoadMore)
         assertEquals(2, paginator.offset(EvStat.ALL))
     }
 
     @Test
     fun loadAllPage_onError_withOfflineFlag_setsOfflineTrue() = runBlocking {
-        val cached = listOf(pokemon(1))
         whenever(repository.fetchPage(20, 0)).thenReturn(
             Resource.Error("error", isOffline = true)
         )
-        whenever(repository.getCachedPokemon()).thenReturn(cached)
         whenever(repository.getNextPageOffset()).thenReturn(1)
 
         val result = paginator.loadAllPage(0) as PageLoadResult.Failure
 
         assertTrue(result.isOffline)
-        assertEquals(cached, result.pokemon)
     }
 
     @Test
     fun loadAllPage_onError_withoutOfflineFlag_setsOfflineFalse() = runBlocking {
         whenever(repository.fetchPage(20, 0)).thenReturn(Resource.Error("network error"))
-        whenever(repository.getCachedPokemon()).thenReturn(emptyList())
         whenever(repository.getNextPageOffset()).thenReturn(0)
 
         val result = paginator.loadAllPage(0) as PageLoadResult.Failure
@@ -140,30 +118,41 @@ class PokedexPaginatorTest {
     // --- loadEvFilteredPage ---
 
     @Test
-    fun loadEvFilteredPage_withoutTotalCount_returnsSuccessWithCurrentState() = runBlocking {
+    fun loadEvFilteredPage_withoutTotalCount_returnsSuccessCanLoadMoreFalse() = runBlocking {
         paginator.totalCount = null
-        paginator.setLoaded(EvStat.SPEED, listOf(pokemon(1, speedEv = 1)))
-        paginator.setOffset(EvStat.SPEED, 20)
 
         val result = paginator.loadEvFilteredPage(EvStat.SPEED) as PageLoadResult.Success
 
-        assertEquals(listOf(pokemon(1, speedEv = 1)), result.pokemon)
         assertFalse(result.canLoadMore)
     }
 
     @Test
-    fun loadEvFilteredPage_filtersToOnlyMatchingStat() = runBlocking {
-        paginator.totalCount = 10
-        whenever(repository.getCachedPokemon()).thenReturn(emptyList())
+    fun loadEvFilteredPage_stopsWhenCacheReachesTargetCount() = runBlocking {
+        paginator.totalCount = 40
+        val speedPokemon = pokemon(2, speedEv = 2)
+        // Call 1 (initialCount): empty — targetCount = 1
+        // Call 2 (loop check): has 1 matching — breaks
+        whenever(repository.getCachedPokemon())
+            .thenReturn(emptyList())
+            .thenReturn(listOf(speedPokemon))
         whenever(repository.getNextPageOffset()).thenReturn(0)
-        whenever(repository.fetchPage(20, 0)).thenReturn(
-            Resource.Success(listOf(pokemon(1, speedEv = 0), pokemon(2, speedEv = 2)))
-        )
 
         val result = paginator.loadEvFilteredPage(EvStat.SPEED) as PageLoadResult.Success
 
-        assertEquals(1, result.pokemon.size)
-        assertEquals(2, result.pokemon[0].id)
+        assertTrue(result.canLoadMore)
+        assertEquals(0, paginator.offset(EvStat.SPEED))
+    }
+
+    @Test
+    fun loadEvFilteredPage_onFetchError_returnsFailure() = runBlocking {
+        paginator.totalCount = 40
+        whenever(repository.getCachedPokemon()).thenReturn(emptyList())
+        whenever(repository.getNextPageOffset()).thenReturn(0)
+        whenever(repository.fetchPage(20, 0)).thenReturn(Resource.Error("error", isOffline = true))
+
+        val result = paginator.loadEvFilteredPage(EvStat.SPEED) as PageLoadResult.Failure
+
+        assertTrue(result.isOffline)
     }
 
     private fun pokemon(id: Int, speedEv: Int = 0) = Pokemon(

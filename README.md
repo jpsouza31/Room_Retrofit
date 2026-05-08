@@ -12,6 +12,7 @@ Aplicativo Android que replica os principios de uma EV Pokedex: consulta Pokemon
 - Tela de detalhe com sprite, tipos, EV yield e base stats.
 - Cache local com Room para uso offline, incluindo os bytes do sprite.
 - Badges e telas exibem dados lidos do Room assim que entram no cache.
+- Tela de detalhe reage a atualizacoes do Room em tempo real, inclusive quando o WorkManager sincroniza em background.
 - Pull-to-refresh para atualizar os dados da PokeAPI.
 - Botao para limpar o cache local.
 - Snackbar para erros e banner quando o cache offline esta sendo usado.
@@ -41,7 +42,7 @@ O `PokedexRepository` e o ponto central da sincronizacao offline first:
 3. Se o cache ainda estiver valido, o app encerra sem chamar a API.
 4. Se estiver offline, lista, filtros, busca e detalhe continuam usando o que ja existe no Room.
 5. Se estiver online, Retrofit busca a contagem completa e carrega paginas de 20 Pokemon conforme o usuario rola a lista.
-6. A resposta da PokeAPI e convertida para entidade, salva no Room e entao relida do Room antes de chegar a UI.
+6. A resposta da PokeAPI e convertida para entidade e salva no Room. A UI nunca recebe dados diretamente da rede: um Flow do Room esta sempre ativo no ViewModel e e a unica fonte de atualizacao da lista, inclusive durante paginacao e sincronizacao em background.
 7. Pull-to-refresh nunca apaga o cache antes da rede responder; se a sincronizacao falhar, o app mantem os dados locais.
 
 Retrofit define os endpoints da PokeAPI. OkHttp executa as chamadas HTTP, aplica timeouts e registra logs basicos de rede. Nenhum composable faz download direto de dados ou imagens; sprites exibidos na UI vem dos bytes persistidos no Room.
@@ -73,6 +74,7 @@ app/src/main/java/com/app/room_retrofit/
 │   │   ├── PokedexScreen.kt
 │   │   └── PokemonDetailScreen.kt
 │   └── viewmodel/
+│       ├── PokedexPaginator.kt
 │       ├── PokedexViewModel.kt
 │       └── PokemonDetailViewModel.kt
 └── util/

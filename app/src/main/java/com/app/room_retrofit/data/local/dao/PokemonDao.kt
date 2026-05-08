@@ -32,4 +32,10 @@ interface PokemonDao {
 
     @Query("SELECT * FROM pokemon WHERE name LIKE '%' || :name || '%' ORDER BY id ASC")
     suspend fun searchPokemonByName(name: String): List<PokemonEntity>
+
+    @Query("SELECT * FROM pokemon WHERE id = :id LIMIT 1")
+    fun observePokemonById(id: Int): Flow<PokemonEntity?>
+
+    @Query("SELECT * FROM pokemon WHERE name LIKE '%' || :name || '%' ORDER BY id ASC")
+    fun observePokemonByName(name: String): Flow<List<PokemonEntity>>
 }
