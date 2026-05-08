@@ -1,5 +1,6 @@
 package com.app.room_retrofit.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -8,7 +9,7 @@ data class PokemonEntity(
     @PrimaryKey val id: Int,
     val name: String,
     val spriteUrl: String?,
-    val spriteBytes: ByteArray?,
+    @ColumnInfo(typeAffinity = ColumnInfo.BLOB) val spriteBytes: ByteArray?,
     val types: String,
     val hp: Int,
     val attack: Int,

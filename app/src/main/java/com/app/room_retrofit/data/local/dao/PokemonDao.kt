@@ -18,7 +18,7 @@ interface PokemonDao {
     @Query("DELETE FROM pokemon")
     suspend fun clearPokemon()
 
-    @Query("SELECT MAX(cachedAt) FROM pokemon")
+    @Query("SELECT MIN(cachedAt) FROM pokemon")
     suspend fun getLastCacheTime(): Long?
 
     @Query("SELECT COUNT(*) FROM pokemon")
