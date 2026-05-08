@@ -145,8 +145,7 @@ class PokedexViewModel @Inject constructor(
                         isLoading = false,
                         isLoadingNextPage = false,
                         canLoadMore = false,
-                        error = null,
-                        isOffline = !repository.isOnline()
+                        error = null
                     ).withFilters()
                 }
                 is Resource.Error -> {
@@ -199,7 +198,8 @@ class PokedexViewModel @Inject constructor(
         viewModelScope.launch {
             repository.clearCache()
             paginator.reset()
-            _uiState.value = PokedexUiState(error = "Cache local limpo.")
+            _uiState.value = PokedexUiState()
+            loadInitialPage()
         }
     }
 
@@ -270,8 +270,7 @@ class PokedexViewModel @Inject constructor(
                 isRefreshing = false,
                 isLoadingNextPage = false,
                 canLoadMore = result.canLoadMore,
-                error = null,
-                isOffline = false
+                error = null
             ).withFilters()
             is PageLoadResult.Failure -> _uiState.value.copy(
                 pokemon = result.pokemon.sortedBy { it.id },
