@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -46,7 +47,7 @@ fun PokemonDetailScreen(
     onBack: () -> Unit,
     viewModel: PokemonDetailViewModel = hiltViewModel()
 ) {
-    val pokemon by viewModel.pokemon.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(pokemonId) {
         viewModel.loadPokemon(pokemonId)
@@ -55,7 +56,7 @@ fun PokemonDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(pokemon?.displayName() ?: "Pokemon") },
+                title = { Text(uiState.pokemon?.displayName() ?: "Pokemon") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -67,8 +68,8 @@ fun PokemonDetailScreen(
             )
         }
     ) { innerPadding ->
-        val current = pokemon
-        if (current == null) {
+        val current = uiState.pokemon
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -77,11 +78,42 @@ fun PokemonDetailScreen(
             ) {
                 CircularProgressIndicator()
             }
+        } else if (current == null) {
+            PokemonDetailError(
+                message = uiState.error ?: "Pokemon nao encontrado",
+                onRetry = { viewModel.loadPokemon(pokemonId) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            )
         } else {
             PokemonDetailContent(
                 pokemon = current,
                 modifier = Modifier.padding(innerPadding)
             )
+        }
+    }
+}
+
+@Composable
+private fun PokemonDetailError(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onRetry) {
+            Text("Tentar novamente")
         }
     }
 }

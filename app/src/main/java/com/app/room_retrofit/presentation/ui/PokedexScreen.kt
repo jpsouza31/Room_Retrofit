@@ -57,7 +57,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.app.room_retrofit.domain.model.DataSource
 import com.app.room_retrofit.domain.model.EvStat
 import com.app.room_retrofit.domain.model.Pokemon
 import com.app.room_retrofit.presentation.viewmodel.PokedexViewModel
@@ -283,7 +282,6 @@ private fun PokemonListItem(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                DataSourceBadge(source = pokemon.source)
                 EvYieldBadge(
                     value = pokemon.evFor(selectedEvStat),
                     label = if (selectedEvStat == EvStat.ALL) "EVs" else selectedEvStat.label
@@ -342,24 +340,6 @@ fun TypePill(type: String) {
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1
-        )
-    }
-}
-
-@Composable
-fun DataSourceBadge(source: DataSource) {
-    val label = if (source == DataSource.NETWORK) "API" else "Cache"
-    val tint = if (source == DataSource.NETWORK) Color(0xFF15803D) else Color(0xFF64748B)
-    Surface(
-        color = tint.copy(alpha = 0.12f),
-        contentColor = tint,
-        shape = RoundedCornerShape(4.dp)
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium
         )
     }
 }

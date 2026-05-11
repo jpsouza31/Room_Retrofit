@@ -36,11 +36,9 @@ class PokedexRepository @Inject constructor(
     private val db: AppDatabase,
     private val dao: PokemonDao,
     private val api: PokeApiService,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val cacheValidityMs = 24 * 60 * 60 * 1000L
-
-    fun isOnline(): Boolean = context.isOnline()
 
     fun connectivityFlow(): Flow<Boolean> = callbackFlow {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

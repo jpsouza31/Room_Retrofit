@@ -37,6 +37,7 @@ class PokedexViewModel @Inject constructor(
 
     private val paginator = PokedexPaginator(repository)
     private var searchJob: Job? = null
+    private var pageLoadJob: Job? = null
 
     private val _uiState = MutableStateFlow(PokedexUiState())
     val uiState: StateFlow<PokedexUiState> = _uiState.asStateFlow()
@@ -64,27 +65,9 @@ class PokedexViewModel @Inject constructor(
     }
 
     fun loadInitialPage(forceRefresh: Boolean = false) {
-        viewModelScope.launch {
-            val cachedPokemon = repository.getCachedPokemon()
-            if (cachedPokemon.isNotEmpty() && !forceRefresh) {
-                paginator.setOffset(EvStat.ALL, repository.getNextPageOffset())
-                _uiState.value = _uiState.value.copy(
-                    pokemon = cachedPokemon,
-                    isLoading = false,
-                    canLoadMore = paginator.canLoadMore(repository.getNextPageOffset())
-                ).withFilters()
-            } else {
-                paginator.setOffset(EvStat.ALL, if (forceRefresh) 0 else repository.getNextPageOffset())
-                _uiState.value = _uiState.value.copy(
-                    pokemon = if (forceRefresh) cachedPokemon else emptyList(),
-                    filteredPokemon = if (forceRefresh) cachedPokemon else emptyList()
-                )
-            }
-
-            val shouldRefresh = forceRefresh || repository.shouldRefreshCache()
-            if (!shouldRefresh && cachedPokemon.isNotEmpty()) return@launch
-
-            loadPageForFilter(stat = EvStat.ALL, refreshing = forceRefresh)
+        pageLoadJob?.cancel()
+        pageLoadJob = viewModelScope.launch {
+            loadInitialPageInternal(forceRefresh)
         }
     }
 
@@ -92,13 +75,14 @@ class PokedexViewModel @Inject constructor(
         val state = _uiState.value
         if (state.isLoading || state.isLoadingNextPage || !state.canLoadMore) return
         if (state.query.isNotBlank()) return
-        viewModelScope.launch {
+        pageLoadJob = viewModelScope.launch {
             loadPageForFilter(stat = state.selectedEvStat, refreshing = false)
         }
     }
 
     fun refresh() {
-        viewModelScope.launch {
+        pageLoadJob?.cancel()
+        pageLoadJob = viewModelScope.launch {
             val selectedStat = _uiState.value.selectedEvStat
             paginator.reset()
             paginator.setOffset(selectedStat, 0)
@@ -188,7 +172,8 @@ class PokedexViewModel @Inject constructor(
     }
 
     fun selectEvStat(stat: EvStat) {
-        viewModelScope.launch {
+        pageLoadJob?.cancel()
+        pageLoadJob = viewModelScope.launch {
             if (_uiState.value.query.isNotBlank()) {
                 _uiState.value = _uiState.value.copy(selectedEvStat = stat)
                 updateQuery(_uiState.value.query)
@@ -219,12 +204,37 @@ class PokedexViewModel @Inject constructor(
 
     fun clearLocalCache() {
         searchJob?.cancel()
-        viewModelScope.launch {
+        pageLoadJob?.cancel()
+        pageLoadJob = viewModelScope.launch {
             repository.clearCache()
             paginator.reset()
             _uiState.value = PokedexUiState()
-            loadInitialPage()
+            loadInitialPageInternal()
         }
+    }
+
+    private suspend fun loadInitialPageInternal(forceRefresh: Boolean = false) {
+        val cachedPokemon = repository.getCachedPokemon()
+        val shouldRefresh = forceRefresh || repository.shouldRefreshCache()
+        if (cachedPokemon.isNotEmpty() && !shouldRefresh) {
+            val nextOffset = repository.getNextPageOffset()
+            paginator.setOffset(EvStat.ALL, nextOffset)
+            _uiState.value = _uiState.value.copy(
+                pokemon = cachedPokemon,
+                isLoading = false,
+                canLoadMore = paginator.canLoadMore(nextOffset)
+            ).withFilters()
+        } else {
+            paginator.setOffset(EvStat.ALL, 0)
+            _uiState.value = _uiState.value.copy(
+                pokemon = cachedPokemon,
+                filteredPokemon = cachedPokemon
+            )
+        }
+
+        if (!shouldRefresh && cachedPokemon.isNotEmpty()) return
+
+        loadPageForFilter(stat = EvStat.ALL, refreshing = forceRefresh)
     }
 
     private fun PokedexUiState.withFilters(): PokedexUiState {
