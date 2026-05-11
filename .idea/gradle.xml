@@ -8,8 +8,8 @@
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
         <option name="modules">
           <set>
-            <option value="$PROJECT_DIR$" />
-            <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/../../PM-III-IV - Integração de Aplicativos para Dispositivos Móveis com Serviços Web/Room_Retrofit" />
+            <option value="$PROJECT_DIR$/../../PM-III-IV - Integração de Aplicativos para Dispositivos Móveis com Serviços Web/Room_Retrofit/app" />
           </set>
         </option>
       </GradleProjectSettings>

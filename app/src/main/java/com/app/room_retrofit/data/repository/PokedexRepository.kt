@@ -43,7 +43,10 @@ class PokedexRepository @Inject constructor(
     fun connectivityFlow(): Flow<Boolean> = callbackFlow {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) { trySend(true) }
+            override fun onAvailable(network: Network) {
+                val caps = manager.getNetworkCapabilities(network)
+                trySend(caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true)
+            }
             override fun onLost(network: Network) { trySend(false) }
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
                 trySend(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
