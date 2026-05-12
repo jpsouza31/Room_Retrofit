@@ -6,7 +6,7 @@ Aplicativo Android que replica os principios de uma EV Pokedex: consulta Pokemon
 
 - Lista paginada de Pokemon sincronizada da PokeAPI para o Room.
 - Carregamento paginado de 20 Pokemon por vez, ordenado por numero da Pokedex.
-- Busca por nome ou numero usando cache local primeiro e PokeAPI apenas para sincronizar itens ausentes.
+- Busca por nome ou numero usando cache local primeiro; se um numero ou nome exato ainda nao estiver no cache, consulta a PokeAPI e salva o item encontrado no Room.
 - Filtros por EV yield: HP, Attack, Defense, Sp. Atk, Sp. Def e Speed.
 - Ordenacao sempre por numero da Pokedex, inclusive com filtros ativos.
 - Tela de detalhe com sprite, tipos, EV yield e base stats.
@@ -139,7 +139,8 @@ Declaradas em `app/src/main/AndroidManifest.xml`:
 | Falha na API com cache | Mantem cache e mostra erro |
 | Pull-to-refresh | Tenta sincronizar com a API sem descartar o cache existente |
 | Busca offline | Procura por nome ou numero no Room |
-| Busca online sem resultado local | Busca na PokeAPI, salva no Room e relê do Room |
+| Busca online por numero ou nome exato sem resultado local | Busca esse Pokemon na PokeAPI, salva no Room e relê do Room. Exemplo: pesquisar `1025` ou `pecharunt` depois de carregar poucas paginas adiciona esse Pokemon ao cache se a API responder com sucesso |
+| Busca online textual com correspondencias locais | Exibe as correspondencias locais; nao usa um endpoint remoto de busca parcial para completar outros possiveis resultados |
 | Filtro offline | Filtra os Pokemon salvos no Room |
 | Limpar cache | Remove os Pokemon salvos no Room e zera o estado da tela |
-| Sync em background (6h) | Atualiza todas as paginas cacheadas com rede disponivel |
+| Sync em background (6h) | Atualiza as paginas dentro do prefixo contiguo da Pokedex ja cacheado; itens esparsos buscados individualmente podem ficar fora desse ciclo |
